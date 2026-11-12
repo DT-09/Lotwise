@@ -71,7 +71,7 @@ def test_complete_lot_review_flow(monkeypatch, tmp_path):
         lot_id = lot.json()["id"]
         uploaded = client.post("/api/lots/" + lot_id + "/documents", headers=headers,
                                files={"file": ("coa.txt",
-                               "Supplier: Northstar Ingredients\\nLot: LOT-42\\nMoisture: 6.2 %\\nCadmium: 0.7 ppm",
+                               "Supplier: Northstar Ingredients\nLot: LOT-42\nMoisture: 6.2 %\nCadmium: 0.7 ppm",
                                "text/plain")})
         assert uploaded.status_code == 200, uploaded.text
         analysis = client.post("/api/lots/" + lot_id + "/analyze", headers=headers)
