@@ -4,7 +4,7 @@ from datetime import datetime, timezone
 from contextlib import contextmanager
 from pathlib import Path
 from typing import Any
-from fastapi import FastAPI, Depends, File, HTTPException, UploadFile
+from fastapi import FastAPI, Depends, File, HTTPException, UploadFile, Request
 from fastapi.responses import FileResponse, HTMLResponse, JSONResponse
 from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
 from pydantic import BaseModel, Field
@@ -26,6 +26,35 @@ SECRET=configured_secret or ("LOCAL-ONLY-"+str(DATA))
 DATA.mkdir(parents=True,exist_ok=True); UPLOADS.mkdir(parents=True,exist_ok=True)
 app=FastAPI(title="Lotwise",version="0.1.0",description="Evidence-linked supplier lot verification.")
 auth=HTTPBearer(auto_error=False)
+# Process-local abuse guard. For multi-instance production, replace with a shared
+# Redis-backed limiter at the edge before accepting public sign-ups.
+AUTH_WINDOW_SECONDS=300
+AUTH_MAX_ATTEMPTS=10
+_auth_attempts={}
+def _auth_rate_limited(request):
+    now=time.time()
+    key=request.client.host if request.client else "unknown"
+    bucket=[t for t in _auth_attempts.get(key,[]) if now-t<AUTH_WINDOW_SECONDS]
+    if len(bucket)>=AUTH_MAX_ATTEMPTS:
+        _auth_attempts[key]=bucket
+        return True
+    bucket.append(now)
+    _auth_attempts[key]=bucket
+    if len(_auth_attempts)>5000:
+        for k,v in list(_auth_attempts.items()):
+            if not v or now-v[-1]>=AUTH_WINDOW_SECONDS: _auth_attempts.pop(k,None)
+    return False
+@app.middleware("http")
+async def security_headers(request:Request,call_next):
+    response=await call_next(request)
+    response.headers["X-Content-Type-Options"]="nosniff"
+    response.headers["X-Frame-Options"]="DENY"
+    response.headers["Referrer-Policy"]="strict-origin-when-cross-origin"
+    response.headers["Permissions-Policy"]="camera=(), microphone=(), geolocation=()"
+    response.headers["Content-Security-Policy"]="default-src 'self'; base-uri 'self'; object-src 'none'; frame-ancestors 'none'; form-action 'self'; img-src 'self' data:; style-src 'self'; script-src 'self'; connect-src 'self'"
+    if os.getenv("LOTWISE_ENV","development").lower()=="production":
+        response.headers["Strict-Transport-Security"]="max-age=31536000; includeSubDomains"
+    return response
 def stamp(): return datetime.now(timezone.utc).isoformat()
 @contextmanager
 def conn():
