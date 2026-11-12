@@ -52,6 +52,9 @@ def test_customer_records_are_isolated(monkeypatch, tmp_path):
 
 def test_complete_lot_review_flow(monkeypatch, tmp_path):
     with make_client(monkeypatch, tmp_path) as client:
+        assert client.get("/health").json()["status"] == "ok"
+        assert client.get("/examples/sample_coa.txt").status_code == 200
+        assert client.get("/docs/COMMERCIAL.md").status_code == 200
         headers = register(client, "qa@example.com")
         supplier = client.post("/api/suppliers", headers=headers,
                                json={"name": "Northstar Ingredients", "code": "SUP-1"}).json()
@@ -69,6 +72,11 @@ def test_complete_lot_review_flow(monkeypatch, tmp_path):
         })
         assert lot.status_code == 200, lot.text
         lot_id = lot.json()["id"]
+        premature = client.post("/api/lots/" + lot_id + "/decision", headers=headers, json={
+            "disposition": "on_hold", "rationale": "Review has not been run yet.",
+            "reviewer": "QA Reviewer"
+        })
+        assert premature.status_code == 422
         uploaded = client.post("/api/lots/" + lot_id + "/documents", headers=headers,
                                files={"file": ("coa.txt",
                                "Supplier: Northstar Ingredients\nLot: LOT-42\nMoisture: 6.2 %\nCadmium: 0.7 ppm",
@@ -99,3 +107,13 @@ def test_json_observations_are_extracted():
 def test_pdf_page_marker_is_preserved():
     rows=observations("[LOTWISE_SOURCE_PAGE:3]\nMoisture: 6.2 %")
     assert rows[0]["source_page"]==3
+
+
+def test_specification_rejects_non_numeric_limits(monkeypatch, tmp_path):
+    with make_client(monkeypatch, tmp_path) as client:
+        headers=register(client,"spec@example.com")
+        response=client.post("/api/specifications",headers=headers,json={
+            "ingredient":"Cocoa powder","version":"1.0","approved":True,
+            "tests":[{"name":"Moisture","unit":"%","min":"not-a-number","max":8}]
+        })
+        assert response.status_code==422
