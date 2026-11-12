@@ -123,6 +123,20 @@ def observations(text):
                 try: found.append({"test":str(r["test"]).strip(),"value":float(r["value"]),"unit":str(r.get("unit") or "").strip(),"source_excerpt":json.dumps(row)})
                 except (ValueError,TypeError): pass
     except Exception: pass
+    try:
+        payload=json.loads(text)
+        records=payload if isinstance(payload,list) else payload.get("tests",payload.get("results",[]))
+        for item in records if isinstance(records,list) else []:
+            if not isinstance(item,dict): continue
+            name=item.get("test") or item.get("name")
+            if not name or item.get("value") is None: continue
+            try:
+                found.append({"test":str(name).strip(),"value":float(item["value"]),
+                              "unit":str(item.get("unit") or "").strip(),
+                              "source_excerpt":json.dumps(item,ensure_ascii=False),
+                              "source_page":item.get("page"),"source_line":item.get("line")})
+            except (TypeError,ValueError): pass
+    except Exception: pass
     unique={}
     for x in found: unique[(x["test"].casefold(),x["value"],x["unit"].casefold())]=x
     return list(unique.values())
