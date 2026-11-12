@@ -1,6 +1,7 @@
 from __future__ import annotations
 import base64, csv, hashlib, hmac, io, json, os, re, secrets, sqlite3, time, uuid
 from datetime import datetime, timezone
+from contextlib import contextmanager
 from pathlib import Path
 from typing import Any
 from fastapi import FastAPI, Depends, File, HTTPException, UploadFile
@@ -23,8 +24,13 @@ DATA.mkdir(parents=True,exist_ok=True); UPLOADS.mkdir(parents=True,exist_ok=True
 app=FastAPI(title="Lotwise",version="0.1.0",description="Evidence-linked supplier lot verification.")
 auth=HTTPBearer(auto_error=False)
 def stamp(): return datetime.now(timezone.utc).isoformat()
+@contextmanager
 def conn():
-    c=sqlite3.connect(DB); c.row_factory=sqlite3.Row; c.execute("PRAGMA foreign_keys=ON"); return c
+    c=sqlite3.connect(DB); c.row_factory=sqlite3.Row; c.execute("PRAGMA foreign_keys=ON")
+    try:
+        yield c
+    finally:
+        c.close()
 def init():
     with conn() as c:
         c.executescript("""
