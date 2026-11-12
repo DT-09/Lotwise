@@ -29,6 +29,10 @@ def conn():
     c=sqlite3.connect(DB); c.row_factory=sqlite3.Row; c.execute("PRAGMA foreign_keys=ON")
     try:
         yield c
+        c.commit()
+    except Exception:
+        c.rollback()
+        raise
     finally:
         c.close()
 def init():
