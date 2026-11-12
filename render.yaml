@@ -1,0 +1,18 @@
+services:
+  - type: web
+    name: lotwise
+    runtime: docker
+    plan: starter
+    healthCheckPath: /health
+    autoDeploy: true
+    disk:
+      name: lotwise-data
+      mountPath: /var/data
+      sizeGB: 10
+    envVars:
+      - key: LOTWISE_ENV
+        value: production
+      - key: LOTWISE_DATA_DIR
+        value: /var/data
+      - key: LOTWISE_SECRET_KEY
+        generateValue: true
