@@ -1,0 +1,8 @@
+RECEIVING RECORD
+Supplier: Northstar Ingredients
+Ingredient: Cocoa powder
+Lot: LOT-42
+Purchase order: PO-7
+Received quantity: 500 kg
+
+Synthetic sample record. All details are fictional.

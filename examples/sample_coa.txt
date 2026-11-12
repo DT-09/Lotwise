@@ -1,0 +1,8 @@
+SUPPLIER: Northstar Ingredients
+INGREDIENT: Cocoa powder
+SUPPLIER LOT: LOT-42
+PURCHASE ORDER: PO-7
+Moisture: 6.2 %
+Cadmium: 0.7 ppm
+
+Synthetic sample document. All supplier, lot and test data are fictional.

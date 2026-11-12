@@ -1,0 +1,9 @@
+{
+  "ingredient": "Cocoa powder",
+  "version": "1.0",
+  "approved": true,
+  "tests": [
+    {"name": "Moisture", "unit": "%", "min": 0, "max": 8},
+    {"name": "Cadmium", "unit": "ppm", "min": 0, "max": 0.5}
+  ]
+}
