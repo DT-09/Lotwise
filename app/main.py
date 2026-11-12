@@ -1,5 +1,5 @@
 from __future__ import annotations
-import base64, csv, hashlib, hmac, io, json, os, re, secrets, sqlite3, time, uuid
+import base64, csv, hashlib, hmac, io, json, math, os, re, secrets, sqlite3, time, uuid
 from datetime import datetime, timezone
 from contextlib import contextmanager
 from pathlib import Path
@@ -19,7 +19,10 @@ DATA=Path(os.getenv("LOTWISE_DATA_DIR","./data")).resolve()
 UPLOADS=DATA/"uploads"
 DB=DATA/"lotwise.sqlite3"
 MAX_BYTES=int(os.getenv("LOTWISE_MAX_UPLOAD_MB","12"))*1024*1024
-SECRET=os.getenv("LOTWISE_SECRET_KEY") or ("LOCAL-ONLY-"+str(DATA))
+configured_secret=os.getenv("LOTWISE_SECRET_KEY")
+if os.getenv("LOTWISE_ENV","development").lower()=="production" and (not configured_secret or len(configured_secret)<32):
+    raise RuntimeError("Production requires LOTWISE_SECRET_KEY with at least 32 characters")
+SECRET=configured_secret or ("LOCAL-ONLY-"+str(DATA))
 DATA.mkdir(parents=True,exist_ok=True); UPLOADS.mkdir(parents=True,exist_ok=True)
 app=FastAPI(title="Lotwise",version="0.1.0",description="Evidence-linked supplier lot verification.")
 auth=HTTPBearer(auto_error=False)
@@ -219,9 +222,20 @@ def specs(u=Depends(user_id)):
 @app.post("/api/specifications")
 def add_spec(x:SpecIn,u=Depends(user_id)):
     if not x.tests: raise HTTPException(422,"At least one test is required")
+    names=set()
     for t in x.tests:
-        if not t.get("name") or not t.get("unit") or (t.get("min") is None and t.get("max") is None): raise HTTPException(422,"Each test needs name, unit and at least one limit")
-        if t.get("min") is not None and t.get("max") is not None and float(t["min"])>float(t["max"]): raise HTTPException(422,"Minimum exceeds maximum")
+        name=str(t.get("name","")).strip().casefold()
+        if not name or not t.get("unit") or (t.get("min") is None and t.get("max") is None):
+            raise HTTPException(422,"Each test needs a unique name, unit and at least one limit")
+        if name in names: raise HTTPException(422,"Duplicate test names are not allowed")
+        names.add(name)
+        try:
+            low=float(t["min"]) if t.get("min") is not None else None
+            high=float(t["max"]) if t.get("max") is not None else None
+            if (low is not None and not math.isfinite(low)) or (high is not None and not math.isfinite(high)):
+                raise ValueError()
+        except (TypeError,ValueError): raise HTTPException(422,"Specification limits must be finite numbers")
+        if low is not None and high is not None and low>high: raise HTTPException(422,"Minimum exceeds maximum")
     eid=str(uuid.uuid4())
     with conn() as c:
         c.execute("INSERT INTO specs VALUES(?,?,?,?,?,?,?)",(eid,u["id"],x.ingredient,x.version,json.dumps(x.tests),int(x.approved),stamp()))
@@ -300,6 +314,8 @@ def decision(lot_id:str,x:DecisionIn,u=Depends(user_id)):
     did=str(uuid.uuid4())
     with conn() as c:
         owned(c,"lots",lot_id,u["id"])
+        prior=c.execute("SELECT 1 FROM findings WHERE lot_id=? AND owner=? LIMIT 1",(lot_id,u["id"])).fetchone()
+        if not prior: raise HTTPException(422,"Run verification before recording a disposition")
         c.execute("INSERT INTO decisions VALUES(?,?,?,?,?,?,?)",(did,u["id"],lot_id,x.disposition,x.rationale,x.reviewer,stamp()))
         c.execute("UPDATE lots SET status=?,updated=? WHERE id=?",(x.disposition,stamp(),lot_id))
         audit(c,u["id"],"lot",lot_id,"human_disposition_recorded",{"disposition":x.disposition,"reviewer":x.reviewer})
