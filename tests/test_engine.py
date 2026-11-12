@@ -117,3 +117,27 @@ def test_specification_rejects_non_numeric_limits(monkeypatch, tmp_path):
             "tests":[{"name":"Moisture","unit":"%","min":"not-a-number","max":8}]
         })
         assert response.status_code==422
+
+
+def test_security_headers_are_present(monkeypatch, tmp_path):
+    with make_client(monkeypatch, tmp_path) as client:
+        response = client.get("/health")
+        assert response.headers["x-content-type-options"] == "nosniff"
+        assert response.headers["x-frame-options"] == "DENY"
+        assert "frame-ancestors 'none'" in response.headers["content-security-policy"]
+
+
+def test_authentication_throttle(monkeypatch, tmp_path):
+    import app.main as service
+    with make_client(monkeypatch, tmp_path) as client:
+        service._auth_attempts.clear()
+        for _ in range(service.AUTH_MAX_ATTEMPTS):
+            response = client.post("/api/auth/login", json={
+                "email": "missing@example.com", "password": "correct-horse-battery-42"
+            })
+            assert response.status_code == 401
+        blocked = client.post("/api/auth/login", json={
+            "email": "missing@example.com", "password": "correct-horse-battery-42"
+        })
+        assert blocked.status_code == 429
+        service._auth_attempts.clear()
