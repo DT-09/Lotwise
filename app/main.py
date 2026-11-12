@@ -180,6 +180,11 @@ def example_file(name:str):
     if name not in {"sample_coa.txt","sample_receiving_record.txt","sample_specification.json"}:
         raise HTTPException(404,"Example not found")
     return FileResponse(ROOT/"examples"/name)
+@app.get("/docs/{name}")
+def documentation(name:str):
+    if name not in {"PRODUCT.md","COMMERCIAL.md","DEPLOYMENT.md"}:
+        raise HTTPException(404,"Document not found")
+    return FileResponse(ROOT/"docs"/name,media_type="text/markdown")
 @app.post("/api/auth/register")
 def register(data:Credentials):
     email=data.email.strip().lower()
