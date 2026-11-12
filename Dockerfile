@@ -5,6 +5,7 @@ COPY requirements.txt .
 RUN pip install --no-cache-dir -r requirements.txt
 COPY app ./app
 COPY web ./web
+COPY examples ./examples
 RUN useradd --create-home --uid 10001 lotwise && mkdir -p /data && chown -R lotwise:lotwise /data /app
 USER lotwise
 EXPOSE 8000
