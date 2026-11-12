@@ -218,7 +218,8 @@ def documentation(name:str):
         raise HTTPException(404,"Document not found")
     return FileResponse(ROOT/"docs"/name,media_type="text/markdown")
 @app.post("/api/auth/register")
-def register(data:Credentials):
+def register(data:Credentials,request:Request):
+    if _auth_rate_limited(request): raise HTTPException(429,"Too many authentication attempts. Try again in five minutes.")
     email=data.email.strip().lower()
     if not re.fullmatch(r"[^@\s]+@[^@\s]+\.[^@\s]+",email): raise HTTPException(422,"Invalid email")
     uid=str(uuid.uuid4())
@@ -229,7 +230,8 @@ def register(data:Credentials):
     except sqlite3.IntegrityError: raise HTTPException(409,"Account already exists")
     return {"token":make_token(uid),"email":email}
 @app.post("/api/auth/login")
-def login(data:Credentials):
+def login(data:Credentials,request:Request):
+    if _auth_rate_limited(request): raise HTTPException(429,"Too many authentication attempts. Try again in five minutes.")
     with conn() as c: row=c.execute("SELECT * FROM users WHERE email=?",(data.email.strip().lower(),)).fetchone()
     if not row or not password_ok(data.password,row["pw"]): raise HTTPException(401,"Email or password incorrect")
     return {"token":make_token(row["id"]),"email":row["email"]}
