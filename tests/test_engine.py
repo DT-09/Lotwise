@@ -87,3 +87,15 @@ def test_complete_lot_review_flow(monkeypatch, tmp_path):
         report = client.get("/api/lots/" + lot_id + "/report", headers=headers)
         assert report.status_code == 200
         assert report.json()["review_decisions"][0]["disposition"] == "on_hold"
+
+
+def test_json_observations_are_extracted():
+    rows=observations('{"results":[{"name":"Moisture","value":6.2,"unit":"%","page":2}]}')
+    assert len(rows)==1
+    assert rows[0]["test"]=="Moisture"
+    assert rows[0]["source_page"]==2
+
+
+def test_pdf_page_marker_is_preserved():
+    rows=observations("[LOTWISE_SOURCE_PAGE:3]\nMoisture: 6.2 %")
+    assert rows[0]["source_page"]==3
