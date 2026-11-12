@@ -100,7 +100,11 @@ class DecisionIn(BaseModel):
 def extract(path,suffix):
     if suffix==".pdf":
         if PdfReader is None: raise HTTPException(503,"PDF parser unavailable")
-        try: return "\n".join(p.extract_text() or "" for p in PdfReader(str(path)).pages)[:500000]
+        try:
+            pages=[]
+            for number,page in enumerate(PdfReader(str(path)).pages,1):
+                pages.append("[LOTWISE_SOURCE_PAGE:"+str(number)+"]\\n"+(page.extract_text() or ""))
+            return "\\n".join(pages)[:500000]
         except Exception: raise HTTPException(422,"Could not extract selectable PDF text")
     try: return path.read_text(encoding="utf-8-sig")[:500000]
     except UnicodeDecodeError: raise HTTPException(422,"Only text-based CSV, JSON and TXT are supported")
@@ -108,7 +112,10 @@ def observations(text):
     found=[]
     rx=re.compile(r"(?im)^\s*([A-Za-z][A-Za-z0-9 /()_.-]{1,70}?)\s*[:=]\s*(-?\d+(?:\.\d+)?)\s*([%a-zA-Zµμ/°0-9.-]{0,24})\s*$")
     for m in rx.finditer(text):
-        found.append({"test":m.group(1).strip(),"value":float(m.group(2)),"unit":m.group(3).strip(),"source_excerpt":m.group(0).strip()})
+        page_refs=re.findall(r"\\[LOTWISE_SOURCE_PAGE:(\\d+)\\]",text[:m.start()])
+        found.append({"test":m.group(1).strip(),"value":float(m.group(2)),"unit":m.group(3).strip(),
+                      "source_excerpt":m.group(0).strip(),"source_page":int(page_refs[-1]) if page_refs else None,
+                      "source_line":text.count("\\n",0,m.start())+1})
     try:
         for row in csv.DictReader(io.StringIO(text)):
             r={str(k).strip().lower():v for k,v in row.items() if k}
@@ -124,7 +131,8 @@ def unit_info(unit):
     return {"%":("percent",1),"percent":("percent",1),"ppm":("ppm",1),"mg/kg":("ppm",1),"g/kg":("ppm",1000),"mg/g":("ppm",1000),"°c":("celsius",1),"c":("celsius",1)}.get(u)
 def compare(obs,spec):
     out=[]; seen=set()
-    for req in spec.get("tests",[]):
+    requirements=spec.get("tests",[]) if isinstance(spec,dict) else spec
+    for req in requirements:
         name=str(req.get("name","")).strip()
         if not name: continue
         matches=[o for o in obs if o["test"].casefold()==name.casefold()]
@@ -205,7 +213,11 @@ def add_lot(x:LotIn,u=Depends(user_id)):
     eid=str(uuid.uuid4())
     with conn() as c:
         owned(c,"suppliers",x.supplier_id,u["id"])
-        if x.spec_id and not owned(c,"specs",x.spec_id,u["id"])["approved"]: raise HTTPException(422,"Specification must be approved")
+        if x.spec_id:
+            selected_spec=owned(c,"specs",x.spec_id,u["id"])
+            if not selected_spec["approved"]: raise HTTPException(422,"Specification must be approved")
+            if selected_spec["ingredient"].strip().casefold()!=x.ingredient.strip().casefold():
+                raise HTTPException(422,"Specification ingredient must match lot ingredient")
         c.execute("INSERT INTO lots VALUES(?,?,?,?,?,?,?,?,?,?)",(eid,u["id"],x.supplier_id,x.ingredient,x.lot_code,x.po_number,x.spec_id,"new",stamp(),stamp()))
         audit(c,u["id"],"lot",eid,"created",{"ingredient":x.ingredient,"lot_code":x.lot_code})
     return {"id":eid,"status":"new"}
@@ -231,6 +243,8 @@ def analyze(lot_id:str,u=Depends(user_id)):
         if not lot["spec_id"]: raise HTTPException(422,"Assign an approved specification first")
         spec=owned(c,"specs",lot["spec_id"],u["id"])
         if not spec["approved"]: raise HTTPException(422,"Specification is not approved")
+        if spec["ingredient"].strip().casefold()!=lot["ingredient"].strip().casefold():
+            raise HTTPException(422,"Specification ingredient does not match this lot")
         docs=c.execute("SELECT * FROM documents WHERE lot_id=? AND owner=?",(lot_id,u["id"])).fetchall()
         if not docs: raise HTTPException(422,"Upload at least one document")
         obs=[]; refs=[]; texts=[]
