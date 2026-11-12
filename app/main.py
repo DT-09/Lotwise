@@ -175,6 +175,11 @@ def static_file(name:str):
     return FileResponse(WEB/name)
 @app.get("/health")
 def health(): return {"status":"ok","service":"lotwise","version":"0.1.0"}
+@app.get("/examples/{name}")
+def example_file(name:str):
+    if name not in {"sample_coa.txt","sample_receiving_record.txt","sample_specification.json"}:
+        raise HTTPException(404,"Example not found")
+    return FileResponse(ROOT/"examples"/name)
 @app.post("/api/auth/register")
 def register(data:Credentials):
     email=data.email.strip().lower()
