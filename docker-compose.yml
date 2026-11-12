@@ -1,0 +1,14 @@
+services:
+  lotwise:
+    build: .
+    ports:
+      - "8000:8000"
+    environment:
+      LOTWISE_SECRET_KEY: ${LOTWISE_SECRET_KEY:?Set LOTWISE_SECRET_KEY}
+      LOTWISE_DATA_DIR: /data
+      LOTWISE_MAX_UPLOAD_MB: "12"
+    volumes:
+      - lotwise_data:/data
+    restart: unless-stopped
+volumes:
+  lotwise_data:
