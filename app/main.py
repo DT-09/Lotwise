@@ -103,8 +103,8 @@ def extract(path,suffix):
         try:
             pages=[]
             for number,page in enumerate(PdfReader(str(path)).pages,1):
-                pages.append("[LOTWISE_SOURCE_PAGE:"+str(number)+"]\\n"+(page.extract_text() or ""))
-            return "\\n".join(pages)[:500000]
+                pages.append("[LOTWISE_SOURCE_PAGE:"+str(number)+"]\n"+(page.extract_text() or ""))
+            return "\n".join(pages)[:500000]
         except Exception: raise HTTPException(422,"Could not extract selectable PDF text")
     try: return path.read_text(encoding="utf-8-sig")[:500000]
     except UnicodeDecodeError: raise HTTPException(422,"Only text-based CSV, JSON and TXT are supported")
@@ -112,10 +112,10 @@ def observations(text):
     found=[]
     rx=re.compile(r"(?im)^\s*([A-Za-z][A-Za-z0-9 /()_.-]{1,70}?)\s*[:=]\s*(-?\d+(?:\.\d+)?)\s*([%a-zA-Zµμ/°0-9.-]{0,24})\s*$")
     for m in rx.finditer(text):
-        page_refs=re.findall(r"\\[LOTWISE_SOURCE_PAGE:(\\d+)\\]",text[:m.start()])
+        page_refs=re.findall(r"\[LOTWISE_SOURCE_PAGE:(\d+)\]",text[:m.start()])
         found.append({"test":m.group(1).strip(),"value":float(m.group(2)),"unit":m.group(3).strip(),
                       "source_excerpt":m.group(0).strip(),"source_page":int(page_refs[-1]) if page_refs else None,
-                      "source_line":text.count("\\n",0,m.start())+1})
+                      "source_line":text.count("\n",0,m.start())+1})
     try:
         for row in csv.DictReader(io.StringIO(text)):
             r={str(k).strip().lower():v for k,v in row.items() if k}
