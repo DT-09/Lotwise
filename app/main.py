@@ -5,7 +5,7 @@ from contextlib import contextmanager
 from pathlib import Path
 from typing import Any
 from fastapi import FastAPI, Depends, File, HTTPException, UploadFile, Request
-from fastapi.responses import FileResponse, HTMLResponse, JSONResponse, RedirectResponse
+from fastapi.responses import FileResponse, HTMLResponse, JSONResponse, RedirectResponse, Response
 from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
 from pydantic import BaseModel, Field
 from sqlalchemy import create_engine, text
@@ -444,6 +444,32 @@ def report(lot_id:str,u=Depends(user_id)):
         ds=c.execute("SELECT disposition,rationale,reviewer,created FROM decisions WHERE lot_id=? AND owner=? ORDER BY created DESC",(lot_id,u["id"])).fetchall()
     if not row: raise HTTPException(404,"Run verification first")
     data=json.loads(row["payload"]); data["review_decisions"]=[dict(x) for x in ds]; return data
+@app.get("/api/lots/{lot_id}/report.csv")
+def report_csv(lot_id:str,u=Depends(user_id)):
+    with conn() as c:
+        owned(c,"lots",lot_id,u["id"])
+        row=c.execute("SELECT payload FROM findings WHERE lot_id=? AND owner=? ORDER BY created DESC LIMIT 1",(lot_id,u["id"])).fetchone()
+        decisions=c.execute("SELECT disposition,rationale,reviewer,created FROM decisions WHERE lot_id=? AND owner=? ORDER BY created DESC",(lot_id,u["id"])).fetchall()
+    if not row: raise HTTPException(404,"Run verification first")
+    data=json.loads(row["payload"])
+    output=io.StringIO()
+    writer=csv.writer(output)
+    writer.writerow(["lot_id","specification_id","specification_version","finding","status","message","observed_value","observed_unit","source_document","source_page","source_line","source_excerpt","review_disposition","reviewer","review_rationale","reviewed_at"])
+    latest=decisions[0] if decisions else {}
+    for finding in data.get("findings",[]):
+        observed=finding.get("observed")
+        observations=observed if isinstance(observed,list) else ([observed] if isinstance(observed,dict) else [{}])
+        for item in observations:
+            writer.writerow([
+                lot_id,data.get("specification_id"),data.get("specification_version"),
+                finding.get("test"),finding.get("status"),finding.get("message"),
+                item.get("value"),item.get("unit"),item.get("filename"),item.get("source_page"),
+                item.get("source_line"),item.get("source_excerpt"),
+                latest.get("disposition"),latest.get("reviewer"),latest.get("rationale"),latest.get("created")
+            ])
+    return Response(content=output.getvalue(),media_type="text/csv; charset=utf-8",
+                    headers={"Content-Disposition":f'attachment; filename="lotwise-{lot_id}-review.csv"'})
+
 @app.post("/api/lots/{lot_id}/decision")
 def decision(lot_id:str,x:DecisionIn,u=Depends(user_id)):
     did=str(uuid.uuid4())
