@@ -66,13 +66,11 @@ class _Connection:
     def execute(self,sql,params=()):
         if self.dialect=="sqlite":
             return _Result(self.connection.exec_driver_sql(sql,tuple(params)))
-        names=[]
-        def bind(_):
-            name="p"+str(len(names)); names.append(name); return ":"+name
         parts=sql.split("?")
-        converted=parts[0]+"".join(":"+("p"+str(i))+parts[i+1] for i in range(len(parts)-1))
-        names.extend("p"+str(i) for i in range(len(parts)-1))
-        values={name:value for name,value in zip(names,params)}
+        if len(parts)-1!=len(params):
+            raise ValueError("SQL placeholder count does not match parameter count")
+        converted=parts[0]+"".join(":p"+str(i)+parts[i+1] for i in range(len(parts)-1))
+        values={"p"+str(i):value for i,value in enumerate(params)}
         return _Result(self.connection.execute(text(converted),values))
     def executescript(self,script):
         for statement in script.split(";"):
