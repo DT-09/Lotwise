@@ -141,18 +141,31 @@ def extract(path,suffix):
     try: return path.read_text(encoding="utf-8-sig")[:500000]
     except UnicodeDecodeError: raise HTTPException(422,"Only text-based CSV, JSON and TXT are supported")
 def observations(text):
+    """Extract conservative numeric observations while retaining source provenance."""
     found=[]
-    rx=re.compile(r"(?im)^\s*([A-Za-z][A-Za-z0-9 /()_.-]{1,70}?)\s*[:=]\s*(-?\d+(?:\.\d+)?)\s*([%a-zA-Zµμ/°0-9.-]{0,24})\s*$")
-    for m in rx.finditer(text):
-        page_refs=re.findall(r"\[LOTWISE_SOURCE_PAGE:(\d+)\]",text[:m.start()])
-        found.append({"test":m.group(1).strip(),"value":float(m.group(2)),"unit":m.group(3).strip(),
-                      "source_excerpt":m.group(0).strip(),"source_page":int(page_refs[-1]) if page_refs else None,
-                      "source_line":text.count("\n",0,m.start())+1})
+    colon_rx=re.compile(r"^\s*([A-Za-z][A-Za-z0-9 /()_.-]{1,70}?)\s*[:=]\s*(-?\d+(?:\.\d+)?)\s*([%a-zA-Zµμ/°0-9.-]{0,24})\s*$")
+    # Only accept whitespace-delimited table rows; requiring two spaces avoids
+    # interpreting ordinary prose and headings as measurements.
+    table_rx=re.compile(r"^\s*([A-Za-z][A-Za-z0-9 /()_.-]{1,70}?)\s{2,}(-?\d+(?:\.\d+)?)\s*([%a-zA-Zµμ/°0-9.-]{1,24})\s*$")
+    page=None
+    for line_no,line in enumerate(text.splitlines(),1):
+        marker=re.search(r"\[LOTWISE_SOURCE_PAGE:(\d+)\]",line)
+        if marker:
+            page=int(marker.group(1))
+            continue
+        match=colon_rx.match(line) or table_rx.match(line)
+        if not match:
+            continue
+        found.append({"test":match.group(1).strip(),"value":float(match.group(2)),"unit":match.group(3).strip(),
+                      "source_excerpt":line.strip(),"source_page":page,"source_line":line_no})
     try:
         for row in csv.DictReader(io.StringIO(text)):
             r={str(k).strip().lower():v for k,v in row.items() if k}
             if "test" in r and "value" in r:
-                try: found.append({"test":str(r["test"]).strip(),"value":float(r["value"]),"unit":str(r.get("unit") or "").strip(),"source_excerpt":json.dumps(row)})
+                try:
+                    found.append({"test":str(r["test"]).strip(),"value":float(r["value"]),
+                                  "unit":str(r.get("unit") or "").strip(),"source_excerpt":json.dumps(row),
+                                  "source_page":None,"source_line":None})
                 except (ValueError,TypeError): pass
     except Exception: pass
     try:
@@ -163,14 +176,19 @@ def observations(text):
             name=item.get("test") or item.get("name")
             if not name or item.get("value") is None: continue
             try:
-                found.append({"test":str(name).strip(),"value":float(item["value"]),
+                value=float(item["value"])
+                if not math.isfinite(value): continue
+                found.append({"test":str(name).strip(),"value":value,
                               "unit":str(item.get("unit") or "").strip(),
                               "source_excerpt":json.dumps(item,ensure_ascii=False),
                               "source_page":item.get("page"),"source_line":item.get("line")})
             except (TypeError,ValueError): pass
     except Exception: pass
     unique={}
-    for x in found: unique[(x["test"].casefold(),x["value"],x["unit"].casefold())]=x
+    for item in found:
+        key=(item["test"].casefold(),item["value"],item["unit"].casefold(),
+             item.get("source_page"),item.get("source_line"),item.get("source_excerpt"))
+        unique[key]=item
     return list(unique.values())
 def unit_info(unit):
     u=unit.strip().casefold().replace(" ","")
@@ -182,18 +200,27 @@ def compare(obs,spec):
         name=str(req.get("name","")).strip()
         if not name: continue
         matches=[o for o in obs if o["test"].casefold()==name.casefold()]
-        if not matches: out.append({"test":name,"status":"missing","message":"Required test not found."}); continue
+        if not matches:
+            out.append({"test":name,"status":"missing","message":"Required test not found."})
+            continue
+        signatures={(o["value"],o["unit"].casefold()) for o in matches}
         for o in matches:
             seen.add((o["test"].casefold(),o["value"],o["unit"].casefold()))
-            target=str(req.get("unit","")); value=o["value"]
-            if target.casefold()!=o["unit"].casefold():
-                a,b=unit_info(o["unit"]),unit_info(target)
-                if not a or not b or a[0]!=b[0]:
-                    out.append({"test":name,"status":"unit_review","observed":o,"required_unit":target,"message":"Units cannot be safely compared; reviewer mapping required."}); continue
-                value=value*a[1]/b[1]
-            low,high=req.get("min"),req.get("max")
-            bad=(low is not None and value<float(low)) or (high is not None and value>float(high))
-            out.append({"test":name,"status":"out_of_spec_candidate" if bad else "within_limit_candidate","observed":o,"normalized_value":value,"required_unit":target,"min":low,"max":high,"message":"Potential specification exception." if bad else "Within configured limits; reviewer verification required."})
+        if len(signatures)>1:
+            out.append({"test":name,"status":"conflicting_observations","observed":matches,
+                        "message":"Multiple different results were found for this test. Resolve the source conflict before comparing against the specification."})
+            continue
+        o=matches[0]
+        target=str(req.get("unit","")); value=o["value"]
+        if target.casefold()!=o["unit"].casefold():
+            a,b=unit_info(o["unit"]),unit_info(target)
+            if not a or not b or a[0]!=b[0]:
+                out.append({"test":name,"status":"unit_review","observed":o,"required_unit":target,"message":"Units cannot be safely compared; reviewer mapping required."})
+                continue
+            value=value*a[1]/b[1]
+        low,high=req.get("min"),req.get("max")
+        bad=(low is not None and value<float(low)) or (high is not None and value>float(high))
+        out.append({"test":name,"status":"out_of_spec_candidate" if bad else "within_limit_candidate","observed":o,"normalized_value":value,"required_unit":target,"min":low,"max":high,"message":"Potential specification exception." if bad else "Within configured limits; reviewer verification required."})
     for o in obs:
         key=(o["test"].casefold(),o["value"],o["unit"].casefold())
         if key not in seen and not any(x.get("test","").casefold()==o["test"].casefold() for x in out):
