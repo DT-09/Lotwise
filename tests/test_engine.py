@@ -143,7 +143,7 @@ def test_authentication_throttle(monkeypatch, tmp_path):
         service._auth_attempts.clear()
 
 def test_whitespace_delimited_table_row_keeps_provenance():
-    rows = observations("[LOTWISE_SOURCE_PAGE:2]\\nMoisture    6.2 %")
+    rows = observations("[LOTWISE_SOURCE_PAGE:2]" + chr(10) + "Moisture    6.2 %")
     assert len(rows) == 1
     assert rows[0]["test"] == "Moisture"
     assert rows[0]["source_page"] == 2
