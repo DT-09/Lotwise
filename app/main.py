@@ -462,19 +462,22 @@ def report_csv(lot_id:str,u=Depends(user_id)):
     data=json.loads(row["payload"])
     output=io.StringIO()
     writer=csv.writer(output)
-    writer.writerow(["lot_id","specification_id","specification_version","finding","status","message","observed_value","observed_unit","source_document","source_page","source_line","source_excerpt","review_disposition","reviewer","review_rationale","reviewed_at"])
+    writer.writerow(["lot_id","specification_id","specification_version","finding","status","message","observed_value","observed_unit","source_document_id","source_document","source_sha256","source_page","source_line","source_excerpt","review_disposition","reviewer","review_rationale","reviewed_at"])
     latest=decisions[0] if decisions else {}
+    document_index={d.get("document_id"):d for d in data.get("documents",[])}
     for finding in data.get("findings",[]):
         observed=finding.get("observed")
         observations=observed if isinstance(observed,list) else ([observed] if isinstance(observed,dict) else [{}])
         for item in observations:
-            writer.writerow([
+            source=document_index.get(item.get("document_id"),{})
+            row=[
                 lot_id,data.get("specification_id"),data.get("specification_version"),
                 finding.get("test"),finding.get("status"),finding.get("message"),
-                item.get("value"),item.get("unit"),item.get("filename"),item.get("source_page"),
-                item.get("source_line"),item.get("source_excerpt"),
+                item.get("value"),item.get("unit"),item.get("document_id"),item.get("filename"),source.get("sha256"),
+                item.get("source_page"),item.get("source_line"),item.get("source_excerpt"),
                 latest.get("disposition"),latest.get("reviewer"),latest.get("rationale"),latest.get("created")
-            ])
+            ]
+            writer.writerow(["'"+value if isinstance(value,str) and value.startswith(("=","+","-","@","\\t","\\r")) else value for value in row])
     return Response(content=output.getvalue(),media_type="text/csv; charset=utf-8",
                     headers={"Content-Disposition":f'attachment; filename="lotwise-{lot_id}-review.csv"'})
 
