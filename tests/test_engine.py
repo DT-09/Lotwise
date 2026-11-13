@@ -53,6 +53,7 @@ def test_customer_records_are_isolated(monkeypatch, tmp_path):
 def test_complete_lot_review_flow(monkeypatch, tmp_path):
     with make_client(monkeypatch, tmp_path) as client:
         assert client.get("/health").json()["status"] == "ok"
+        assert client.get("/ready").json()["status"] == "ready"
         assert client.get("/examples/sample_coa.txt").status_code == 200
         assert client.get("/docs/COMMERCIAL.md").status_code == 200
         headers = register(client, "qa@example.com")
