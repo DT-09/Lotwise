@@ -181,3 +181,21 @@ def test_postgres_parameter_adapter_supports_qmark_queries():
         assert row["id"] == 7
         assert row["label"] == "evidence"
     engine.dispose()
+
+
+def test_s3_document_persistence_uses_private_encryption(monkeypatch, tmp_path):
+    import app.main as service
+    class FakeS3:
+        def __init__(self): self.upload = None
+        def upload_file(self, path, bucket, key, ExtraArgs):
+            self.upload = (path, bucket, key, ExtraArgs)
+    fake = FakeS3()
+    monkeypatch.setattr(service, "S3_BUCKET", "lotwise-private")
+    monkeypatch.setattr(service, "_S3_CLIENT", fake)
+    source = tmp_path / "source.txt"
+    source.write_text("synthetic evidence", encoding="utf-8")
+    stored = service.persist_document(source, "tenant-1", "doc-1", ".txt", "abc123")
+    assert stored == "s3://lotwise-private/tenants/tenant-1/documents/doc-1.txt"
+    assert not source.exists()
+    assert fake.upload[3]["ServerSideEncryption"] == "AES256"
+    assert fake.upload[3]["Metadata"]["sha256"] == "abc123"
