@@ -15,7 +15,9 @@ Review supplier CoAs against approved ingredient specifications; identify missin
 - Explicit unit comparison for a limited documented set.
 - Missing-test, unit mismatch, out-of-limit candidate and identity review findings.
 - Human disposition with rationale and audit events.
-- JSON report retrieval.
+- JSON and evidence-linked CSV report retrieval.
+- Tenant-scoped source document downloads.
+- PostgreSQL database support and private S3-compatible object storage for production configuration.
 
 ## Known limitations
 - Scanned PDFs/OCR are not supported.
@@ -23,8 +25,8 @@ Review supplier CoAs against approved ingredient specifications; identify missin
 - Test-name mapping is exact-match only.
 - Identity checks are text-presence candidates, not verified entity resolution.
 - Only explicitly implemented unit conversions are automated.
-- SQLite and local filesystem storage are used.
-- No SSO, MFA, malware scanning, encrypted object storage, managed backups, billing or independent security audit.
+- SQLite/local filesystem storage are used in local development; production configuration supports managed PostgreSQL and private S3-compatible storage.
+- No OCR, SSO/MFA, malware scanning, formal versioned migrations, configured production bucket, tested managed backups, billing or independent security audit.
 - No representative customer corpus has validated accuracy.
 
 ## Safety boundary
@@ -39,4 +41,6 @@ Lotwise provides decision support only. It does not certify food safety, replace
 6. Reports state that human review is required.
 7. Reviewer can record on-hold, reviewer-approved or reviewer-rejected disposition with rationale.
 8. Health endpoint returns service status.
-9. Automated tests cover parsing, limits, unit mismatch and password hashing.
+9. CSV reports retain source excerpts and reviewer disposition fields.
+10. Source document downloads are scoped to the authenticated account.
+11. Automated tests cover parsing, limits, unit mismatch, database parameter adaptation, object storage and password hashing.
