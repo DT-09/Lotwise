@@ -1,5 +1,5 @@
 from __future__ import annotations
-import base64, csv, hashlib, hmac, io, json, math, os, re, secrets, sqlite3, time, uuid
+import base64, csv, hashlib, hmac, io, json, math, os, re, secrets, time, uuid
 from datetime import datetime, timezone
 from contextlib import contextmanager
 from pathlib import Path
