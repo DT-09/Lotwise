@@ -7,7 +7,7 @@ QA Manager / Head of Quality at a specialty food-ingredient importer, manufactur
 Review supplier CoAs against approved ingredient specifications; identify missing tests, incompatible units, lot/supplier identity gaps and potential out-of-limit results; preserve evidence and record a qualified human disposition.
 
 ## Evaluation release scope
-- Account registration and tenant-scoped records.
+- Account registration and account-scoped records.
 - Supplier and approved-specification registries.
 - Incoming lot creation and document upload.
 - Text extraction from selectable-text PDF, CSV, JSON and TXT.
