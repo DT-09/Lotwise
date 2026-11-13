@@ -98,6 +98,10 @@ def test_complete_lot_review_flow(monkeypatch, tmp_path):
         report = client.get("/api/lots/" + lot_id + "/report", headers=headers)
         assert report.status_code == 200
         assert report.json()["review_decisions"][0]["disposition"] == "on_hold"
+        csv_report = client.get("/api/lots/" + lot_id + "/report.csv", headers=headers)
+        assert csv_report.status_code == 200
+        assert "source_excerpt" in csv_report.text
+        assert "Cadmium" in csv_report.text
 
 
 def test_json_observations_are_extracted():
