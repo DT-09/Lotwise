@@ -12,7 +12,7 @@ Lotwise organizes incoming supplier documents, compares extracted observations a
 
 Included:
 - User registration and sign-in.
-- User-scoped supplier, specification, lot, document and review records.
+- Account-scoped supplier, specification, lot, document and review records.
 - Selectable-text PDF, CSV, JSON and TXT uploads.
 - SHA-256 document fingerprints.
 - Conservative extraction of simple test/value/unit rows.
