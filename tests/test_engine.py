@@ -82,6 +82,9 @@ def test_complete_lot_review_flow(monkeypatch, tmp_path):
                                "Supplier: Northstar Ingredients\nLot: LOT-42\nMoisture: 6.2 %\nCadmium: 0.7 ppm",
                                "text/plain")})
         assert uploaded.status_code == 200, uploaded.text
+        downloaded = client.get("/api/documents/" + uploaded.json()["id"] + "/download", headers=headers)
+        assert downloaded.status_code == 200
+        assert "Northstar Ingredients" in downloaded.text
         analysis = client.post("/api/lots/" + lot_id + "/analyze", headers=headers)
         assert analysis.status_code == 200, analysis.text
         statuses = [x["status"] for x in analysis.json()["findings"]]
