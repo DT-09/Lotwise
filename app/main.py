@@ -8,6 +8,8 @@ from fastapi import FastAPI, Depends, File, HTTPException, UploadFile, Request
 from fastapi.responses import FileResponse, HTMLResponse, JSONResponse
 from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
 from pydantic import BaseModel, Field
+from sqlalchemy import create_engine, text
+from sqlalchemy.exc import IntegrityError, SQLAlchemyError
 try:
     from pypdf import PdfReader
 except ImportError:
@@ -18,6 +20,39 @@ WEB=ROOT/"web"
 DATA=Path(os.getenv("LOTWISE_DATA_DIR","./data")).resolve()
 UPLOADS=DATA/"uploads"
 DB=DATA/"lotwise.sqlite3"
+DATABASE_URL=os.getenv("DATABASE_URL","").strip()
+if DATABASE_URL.startswith("postgres://"):
+    DATABASE_URL=DATABASE_URL.replace("postgres://","postgresql+psycopg://",1)
+if os.getenv("LOTWISE_ENV","development").lower()=="production" and not DATABASE_URL.startswith("postgresql"):
+    raise RuntimeError("Production requires a managed PostgreSQL DATABASE_URL")
+_ENGINE_CACHE={}
+def _engine_for(url):
+    if url not in _ENGINE_CACHE:
+        options={"pool_pre_ping":True}
+        if url.startswith("sqlite"):
+            options["connect_args"]={"check_same_thread":False}
+        _ENGINE_CACHE[url]=create_engine(url,**options)
+    return _ENGINE_CACHE[url]
+class _Result:
+    def __init__(self,result): self.result=result
+    def fetchone(self):
+        row=self.result.fetchone()
+        return row._mapping if row is not None else None
+    def fetchall(self): return [row._mapping for row in self.result.fetchall()]
+class _Connection:
+    def __init__(self,connection,dialect): self.connection=connection; self.dialect=dialect
+    def execute(self,sql,params=()):
+        if self.dialect=="sqlite":
+            return _Result(self.connection.exec_driver_sql(sql,tuple(params)))
+        names=[]
+        def bind(_):
+            name="p"+str(len(names)); names.append(name); return ":"+name
+        converted=re.sub(r"\\?",bind,sql)
+        values={name:value for name,value in zip(names,params)}
+        return _Result(self.connection.execute(text(converted),values))
+    def executescript(self,script):
+        for statement in script.split(";"):
+            if statement.strip(): self.execute(statement)
 MAX_BYTES=int(os.getenv("LOTWISE_MAX_UPLOAD_MB","12"))*1024*1024
 configured_secret=os.getenv("LOTWISE_SECRET_KEY")
 if os.getenv("LOTWISE_ENV","development").lower()=="production" and (not configured_secret or len(configured_secret)<32):
@@ -58,15 +93,12 @@ async def security_headers(request:Request,call_next):
 def stamp(): return datetime.now(timezone.utc).isoformat()
 @contextmanager
 def conn():
-    c=sqlite3.connect(DB); c.row_factory=sqlite3.Row; c.execute("PRAGMA foreign_keys=ON")
-    try:
-        yield c
-        c.commit()
-    except Exception:
-        c.rollback()
-        raise
-    finally:
-        c.close()
+    url=DATABASE_URL or ("sqlite:///"+str(DB))
+    engine=_engine_for(url)
+    with engine.begin() as raw:
+        if engine.dialect.name=="sqlite":
+            raw.exec_driver_sql("PRAGMA foreign_keys=ON")
+        yield _Connection(raw,engine.dialect.name)
 def init():
     with conn() as c:
         c.executescript("""
@@ -254,7 +286,7 @@ def register(data:Credentials,request:Request):
         with conn() as c:
             c.execute("INSERT INTO users VALUES(?,?,?,?)",(uid,email,password_hash(data.password),stamp()))
             audit(c,uid,"account",uid,"created",{})
-    except sqlite3.IntegrityError: raise HTTPException(409,"Account already exists")
+    except IntegrityError: raise HTTPException(409,"Account already exists")
     return {"token":make_token(uid),"email":email}
 @app.post("/api/auth/login")
 def login(data:Credentials,request:Request):
@@ -382,5 +414,5 @@ def decision(lot_id:str,x:DecisionIn,u=Depends(user_id)):
 def audit_log(u=Depends(user_id)):
     with conn() as c: rows=c.execute("SELECT entity,entity_id,action,details,created FROM events WHERE owner=? ORDER BY created DESC LIMIT 300",(u["id"],)).fetchall()
     return [{**dict(r),"details":json.loads(r["details"])} for r in rows]
-@app.exception_handler(sqlite3.Error)
+@app.exception_handler(SQLAlchemyError)
 async def db_error(request,exc): return JSONResponse(status_code=500,content={"detail":"Database operation failed; no disposition was recorded."})
