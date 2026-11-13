@@ -5,11 +5,12 @@ from contextlib import contextmanager
 from pathlib import Path
 from typing import Any
 from fastapi import FastAPI, Depends, File, HTTPException, UploadFile, Request
-from fastapi.responses import FileResponse, HTMLResponse, JSONResponse
+from fastapi.responses import FileResponse, HTMLResponse, JSONResponse, RedirectResponse
 from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
 from pydantic import BaseModel, Field
 from sqlalchemy import create_engine, text
 from sqlalchemy.exc import IntegrityError, SQLAlchemyError
+import boto3
 try:
     from pypdf import PdfReader
 except ImportError:
@@ -23,8 +24,29 @@ DB=DATA/"lotwise.sqlite3"
 DATABASE_URL=os.getenv("DATABASE_URL","").strip()
 if DATABASE_URL.startswith("postgres://"):
     DATABASE_URL=DATABASE_URL.replace("postgres://","postgresql+psycopg://",1)
-if os.getenv("LOTWISE_ENV","development").lower()=="production" and not DATABASE_URL.startswith("postgresql"):
-    raise RuntimeError("Production requires a managed PostgreSQL DATABASE_URL")
+S3_BUCKET=os.getenv("LOTWISE_S3_BUCKET","").strip()
+S3_REGION=os.getenv("LOTWISE_S3_REGION","us-east-1").strip()
+S3_ENDPOINT=os.getenv("LOTWISE_S3_ENDPOINT_URL","").strip() or None
+if os.getenv("LOTWISE_ENV","development").lower()=="production":
+    if not DATABASE_URL.startswith("postgresql"):
+        raise RuntimeError("Production requires a managed PostgreSQL DATABASE_URL")
+    if not S3_BUCKET:
+        raise RuntimeError("Production requires LOTWISE_S3_BUCKET for private document storage")
+_S3_CLIENT=None
+def _s3():
+    global _S3_CLIENT
+    if _S3_CLIENT is None:
+        options={"region_name":S3_REGION}
+        if S3_ENDPOINT: options["endpoint_url"]=S3_ENDPOINT
+        _S3_CLIENT=boto3.client("s3",**options)
+    return _S3_CLIENT
+def persist_document(path,owner,document_id,suffix,digest):
+    if not S3_BUCKET:
+        return str(path)
+    key=f"tenants/{owner}/documents/{document_id}{suffix}"
+    _s3().upload_file(str(path),S3_BUCKET,key,ExtraArgs={"ServerSideEncryption":"AES256","Metadata":{"sha256":digest}})
+    path.unlink(missing_ok=True)
+    return f"s3://{S3_BUCKET}/{key}"
 _ENGINE_CACHE={}
 def _engine_for(url):
     if url not in _ENGINE_CACHE:
@@ -358,14 +380,35 @@ async def upload(lot_id:str,file:UploadFile=File(...),u=Depends(user_id)):
     content=await file.read(MAX_BYTES+1)
     if len(content)>MAX_BYTES: raise HTTPException(413,"File exceeds upload limit")
     with conn() as c: owned(c,"lots",lot_id,u["id"])
-    did=str(uuid.uuid4()); stored=UPLOADS/u["id"]/(did+suffix); stored.parent.mkdir(parents=True,exist_ok=True); stored.write_bytes(content)
-    try: text=extract(stored,suffix)
-    except Exception: stored.unlink(missing_ok=True); raise
+    did=str(uuid.uuid4()); temporary=UPLOADS/u["id"]/(did+suffix); temporary.parent.mkdir(parents=True,exist_ok=True); temporary.write_bytes(content)
+    try: text=extract(temporary,suffix)
+    except Exception: temporary.unlink(missing_ok=True); raise
     digest=hashlib.sha256(content).hexdigest()
+    try: stored=persist_document(temporary,u["id"],did,suffix,digest)
+    except Exception:
+        temporary.unlink(missing_ok=True)
+        raise HTTPException(503,"Document storage is temporarily unavailable")
     with conn() as c:
-        c.execute("INSERT INTO documents VALUES(?,?,?,?,?,?,?,?)",(did,u["id"],lot_id,Path(file.filename or "upload").name[:180],str(stored),digest,text,stamp()))
+        c.execute("INSERT INTO documents VALUES(?,?,?,?,?,?,?,?)",(did,u["id"],lot_id,Path(file.filename or "upload").name[:180],stored,digest,text,stamp()))
         audit(c,u["id"],"document",did,"uploaded",{"lot_id":lot_id,"sha256":digest,"bytes":len(content)})
     return {"id":did,"filename":Path(file.filename or "upload").name,"sha256":digest,"extracted_characters":len(text)}
+@app.get("/api/documents/{document_id}/download")
+def download_document(document_id:str,u=Depends(user_id)):
+    with conn() as c:
+        row=c.execute("SELECT filename,stored FROM documents WHERE id=? AND owner=?",(document_id,u["id"])).fetchone()
+    if not row: raise HTTPException(404,"Document not found")
+    stored=row["stored"]
+    if stored.startswith("s3://"):
+        bucket_key=stored[5:].split("/",1)
+        if len(bucket_key)!=2 or bucket_key[0]!=S3_BUCKET:
+            raise HTTPException(500,"Document storage reference is invalid")
+        url=_s3().generate_presigned_url("get_object",Params={"Bucket":bucket_key[0],"Key":bucket_key[1]},ExpiresIn=300)
+        return RedirectResponse(url,status_code=302)
+    path=Path(stored).resolve()
+    if not path.is_file() or UPLOADS.resolve() not in path.parents:
+        raise HTTPException(404,"Document file is unavailable")
+    return FileResponse(path,filename=row["filename"],content_disposition_type="attachment")
+
 @app.post("/api/lots/{lot_id}/analyze")
 def analyze(lot_id:str,u=Depends(user_id)):
     with conn() as c:
