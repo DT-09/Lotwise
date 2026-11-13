@@ -288,6 +288,16 @@ def static_file(name:str):
     return FileResponse(WEB/name)
 @app.get("/health")
 def health(): return {"status":"ok","service":"lotwise","version":"0.1.0"}
+@app.get("/ready")
+def ready():
+    try:
+        with conn() as c:
+            c.execute("SELECT 1").fetchone()
+        if S3_BUCKET:
+            _s3().head_bucket(Bucket=S3_BUCKET)
+    except Exception:
+        raise HTTPException(503,"Required application dependencies are not ready")
+    return {"status":"ready","service":"lotwise","database":"connected","object_storage":"configured" if S3_BUCKET else "local"}
 @app.get("/examples/{name}")
 def example_file(name:str):
     if name not in {"sample_coa.txt","sample_receiving_record.txt","sample_specification.json"}:
