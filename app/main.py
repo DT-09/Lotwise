@@ -47,7 +47,9 @@ class _Connection:
         names=[]
         def bind(_):
             name="p"+str(len(names)); names.append(name); return ":"+name
-        converted=re.sub(r"\\?",bind,sql)
+        parts=sql.split("?")
+        converted=parts[0]+"".join(":"+("p"+str(i))+parts[i+1] for i in range(len(parts)-1))
+        names.extend("p"+str(i) for i in range(len(parts)-1))
         values={name:value for name,value in zip(names,params)}
         return _Result(self.connection.execute(text(converted),values))
     def executescript(self,script):
