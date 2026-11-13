@@ -19,12 +19,16 @@ Included:
 - Exact-name specification comparisons and limited explicit unit conversions.
 - Missing test, unit mismatch, out-of-limit candidate and identity review findings.
 - Human disposition with rationale and audit events.
+- Evidence-linked JSON and CSV review reports.
+- Tenant-scoped document downloads.
+- Local SQLite development plus managed PostgreSQL support.
+- Private S3-compatible document storage with server-side encryption and short-lived signed downloads.
 - Browser workspace, Dockerfile and Compose configuration.
 
 Not included:
 - OCR for scanned PDFs.
 - General-purpose CoA understanding or fuzzy test-name mapping.
-- Production-grade tenant isolation audit, managed encrypted object storage, verified migrations or operational recovery.
+- Multi-user organisation tenancy, independent tenant-isolation audit, formal schema migrations and tested operational recovery.
 - SSO/MFA, billing, customer support tooling or contractual compliance controls.
 - Validated extraction accuracy or customer-proven ROI.
 
@@ -69,4 +73,4 @@ No customer demand, paid evaluation, payment, subscription revenue or ROI has be
 
 ## Data handling warning
 
-Do not upload confidential supplier or customer documents to an internet-accessible deployment until the deployment has appropriate access controls, encrypted object storage, retention/deletion policies, backup and recovery, security review and customer-approved data-processing terms. The Render blueprint provisions PostgreSQL; uploaded files still use local persistent-disk storage and are not yet on managed object storage.
+Do not upload confidential supplier or customer documents to an internet-accessible deployment until the deployment has appropriate access controls, encrypted object storage, retention/deletion policies, backup and recovery, security review and customer-approved data-processing terms. The Render blueprint provisions PostgreSQL and requires an operator-configured private S3 bucket and credentials. A configured storage backend is not the same as a deployed or security-reviewed production service.
