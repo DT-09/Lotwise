@@ -164,3 +164,17 @@ def test_conflicting_results_are_not_silently_compared():
 def test_non_finite_json_measurement_is_ignored():
     rows = observations('{"tests":[{"name":"Moisture","value":NaN,"unit":"%"}]}')
     assert rows == []
+
+
+def test_postgres_parameter_adapter_supports_qmark_queries():
+    from sqlalchemy import create_engine
+    from app.main import _Connection
+    engine = create_engine("sqlite://")
+    with engine.begin() as raw:
+        db = _Connection(raw, "postgresql")
+        db.execute("CREATE TABLE adapter_check (id INTEGER, label TEXT)")
+        db.execute("INSERT INTO adapter_check (id, label) VALUES (?, ?)", (7, "evidence"))
+        row = db.execute("SELECT id, label FROM adapter_check WHERE id = ?", (7,)).fetchone()
+        assert row["id"] == 7
+        assert row["label"] == "evidence"
+    engine.dispose()
