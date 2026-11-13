@@ -141,3 +141,26 @@ def test_authentication_throttle(monkeypatch, tmp_path):
         })
         assert blocked.status_code == 429
         service._auth_attempts.clear()
+
+def test_whitespace_delimited_table_row_keeps_provenance():
+    rows = observations("[LOTWISE_SOURCE_PAGE:2]\\nMoisture    6.2 %")
+    assert len(rows) == 1
+    assert rows[0]["test"] == "Moisture"
+    assert rows[0]["source_page"] == 2
+    assert rows[0]["source_line"] == 2
+    assert rows[0]["source_excerpt"] == "Moisture    6.2 %"
+
+
+def test_conflicting_results_are_not_silently_compared():
+    out = compare([
+        {"test": "Cadmium", "value": 0.2, "unit": "ppm", "source_excerpt": "0.2"},
+        {"test": "Cadmium", "value": 0.7, "unit": "ppm", "source_excerpt": "0.7"}
+    ], {"tests": [{"name": "Cadmium", "unit": "ppm", "max": 0.5}]})
+    assert len(out) == 1
+    assert out[0]["status"] == "conflicting_observations"
+    assert len(out[0]["observed"]) == 2
+
+
+def test_non_finite_json_measurement_is_ignored():
+    rows = observations('{"tests":[{"name":"Moisture","value":NaN,"unit":"%"}]}')
+    assert rows == []
