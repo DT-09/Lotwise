@@ -13,15 +13,11 @@ services:
     startCommand: uvicorn app.main:app --host 0.0.0.0 --port $PORT
     healthCheckPath: /ready
     autoDeploy: true
-    disk:
-      name: lotwise-data
-      mountPath: /var/data
-      sizeGB: 10
     envVars:
       - key: LOTWISE_ENV
         value: production
       - key: LOTWISE_DATA_DIR
-        value: /var/data
+        value: /tmp/lotwise
       - key: LOTWISE_SECRET_KEY
         generateValue: true
       - key: DATABASE_URL
