@@ -16,7 +16,7 @@ Review supplier CoAs against approved ingredient specifications; identify missin
 - Missing-test, unit mismatch, out-of-limit candidate and identity review findings.
 - Human disposition with rationale and audit events.
 - JSON and evidence-linked CSV report retrieval.
-- Tenant-scoped source document downloads.
+- Authenticated, account-scoped source document downloads.
 - PostgreSQL database support and private S3-compatible object storage for production configuration.
 
 ## Known limitations
