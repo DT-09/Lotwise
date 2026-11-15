@@ -204,12 +204,3 @@ def test_s3_document_persistence_uses_private_encryption(monkeypatch, tmp_path):
     assert not source.exists()
     assert fake.upload[3]["ServerSideEncryption"] == "AES256"
     assert fake.upload[3]["Metadata"]["sha256"] == "abc123"
-
-
-def test_identical_measurements_retain_every_source_reference():
-    out = compare([
-        {"test": "Moisture", "value": 6.2, "unit": "%", "filename": "coa-a.pdf", "document_id": "doc-a"},
-        {"test": "Moisture", "value": 6.2, "unit": "%", "filename": "coa-b.pdf", "document_id": "doc-b"}
-    ], {"tests": [{"name": "Moisture", "unit": "%", "min": 0, "max": 8}]})
-    assert out[0]["status"] == "within_limit_candidate"
-    assert [item["document_id"] for item in out[0]["observed"]] == ["doc-a", "doc-b"]

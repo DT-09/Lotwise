@@ -61,7 +61,6 @@ class _Result:
         row=self.result.fetchone()
         return row._mapping if row is not None else None
     def fetchall(self): return [row._mapping for row in self.result.fetchall()]
-    def __iter__(self): return iter(self.fetchall())
 class _Connection:
     def __init__(self,connection,dialect): self.connection=connection; self.dialect=dialect
     def execute(self,sql,params=()):
@@ -275,7 +274,7 @@ def compare(obs,spec):
             value=value*a[1]/b[1]
         low,high=req.get("min"),req.get("max")
         bad=(low is not None and value<float(low)) or (high is not None and value>float(high))
-        out.append({"test":name,"status":"out_of_spec_candidate" if bad else "within_limit_candidate","observed":matches,"normalized_value":value,"required_unit":target,"min":low,"max":high,"message":"Potential specification exception." if bad else "Within configured limits; reviewer verification required."})
+        out.append({"test":name,"status":"out_of_spec_candidate" if bad else "within_limit_candidate","observed":o,"normalized_value":value,"required_unit":target,"min":low,"max":high,"message":"Potential specification exception." if bad else "Within configured limits; reviewer verification required."})
     for o in obs:
         key=(o["test"].casefold(),o["value"],o["unit"].casefold())
         if key not in seen and not any(x.get("test","").casefold()==o["test"].casefold() for x in out):

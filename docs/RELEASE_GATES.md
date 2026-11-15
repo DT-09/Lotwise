@@ -16,7 +16,7 @@ Lotwise is an evaluation product. A successful build or a green CI run does not 
 
 ## Required before confidential customer data
 
-1. **Identity and sessions:** replace browser localStorage bearer-token persistence with secure, HttpOnly, SameSite cookies; add session revocation, password reset, MFA or SSO where buyer requirements demand it.
+1. **Identity and sessions:** replace browser sessionStorage bearer-token persistence with secure, HttpOnly, SameSite cookies; add session revocation, password reset, MFA or SSO where buyer requirements demand it.
 2. **Abuse controls:** replace process-local authentication throttling with a shared rate limiter; add registration abuse controls and operational alerting.
 3. **Tenant assurance:** complete an independent tenant-isolation review, including every query, object-storage key, report and signed-download path.
 4. **Document safety:** add malware scanning, content-type/signature validation, parser resource limits, encrypted temporary storage and a documented quarantine path.

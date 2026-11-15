@@ -34,7 +34,7 @@ function renderReport(data){
   for(const item of observed){
    const file=docs.find(d=>d.document_id===item.document_id)||{};
    const location=[item.source_page?"Page "+item.source_page:"",item.source_line?"Line "+item.source_line:""].filter(Boolean).join(" · ");
-   evidence+='<div class="evidence"><div class="evidence-meta"><b>'+esc(item.filename||file.filename||"Source observation")+'</b><span>'+esc(location||"Location not supplied")+'</span></div><p>'+esc(item.source_excerpt||"No source excerpt retained.")+'</p><small>Value: '+esc(item.value)+" "+esc(item.unit)+(finding.normalized_value!==undefined?" · Compared value: "+esc(finding.normalized_value)+" "+esc(finding.required_unit||""):"")+'</small></div>';
+   evidence+='<div class="evidence"><div class="evidence-meta"><b>'+esc(item.filename||file.filename||"Source observation")+'</b><span>'+esc(location||"Location not supplied")+'</span></div><p>'+esc(item.source_excerpt||"No source excerpt retained.")+'</p><small>Value: '+esc(item.value)+" "+esc(item.unit)+(item.normalized_value!==undefined?" · Compared value: "+esc(item.normalized_value)+" "+esc(finding.required_unit||""):"")+'</small></div>';
   }
   html+='<article class="finding"><div class="finding-head"><div><h4>'+esc(finding.test)+'</h4><span class="finding-status '+severity(finding.status)+'">'+esc(labelStatus(finding.status))+'</span></div><p>'+esc(finding.message)+'</p></div>'+(evidence||'<p class="no-evidence">No mapped measurement evidence. Check the source documents manually.</p>')+'</article>';
  }
