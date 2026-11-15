@@ -61,6 +61,7 @@ class _Result:
         row=self.result.fetchone()
         return row._mapping if row is not None else None
     def fetchall(self): return [row._mapping for row in self.result.fetchall()]
+    def __iter__(self): return iter(self.fetchall())
 class _Connection:
     def __init__(self,connection,dialect): self.connection=connection; self.dialect=dialect
     def execute(self,sql,params=()):
