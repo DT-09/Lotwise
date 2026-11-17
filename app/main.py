@@ -330,7 +330,7 @@ def login(data:Credentials,request:Request):
 def me(u=Depends(user_id)): return {"id":u["id"],"email":u["email"]}
 @app.get("/api/suppliers")
 def suppliers(u=Depends(user_id)):
-    with conn() as c: return [dict(r) for r in c.execute("SELECT id,name,code,created FROM suppliers WHERE owner=? ORDER BY name",(u["id"],))]
+    with conn() as c: return [dict(r) for r in c.execute("SELECT id,name,code,created FROM suppliers WHERE owner=? ORDER BY name",(u["id"],)).fetchall()]
 @app.post("/api/suppliers")
 def add_supplier(x:SupplierIn,u=Depends(user_id)):
     eid=str(uuid.uuid4())
